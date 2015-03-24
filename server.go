@@ -15,19 +15,19 @@ var cmdServer = &Command{
 	UsageLine:         "server",
 	Short:             "start up a server",
 	Long:              "start up a server",
-	DefaultParameters: "127.0.0.1:1200",
+	DefaultParameters: ":1200",
 }
 
-func send_finish(s interface{}, wpk *packet.Wpacket) {
+func sendFinish(s interface{}, wpk *packet.Wpacket) {
 	session := s.(*tcpsession.Tcpsession)
 	session.Close()
 }
 
-func process_client(session *tcpsession.Tcpsession, rpk *packet.Rpacket) {
-	session.Send(packet.NewWpacket(rpk.Buffer(), rpk.IsRaw()), send_finish)
+func processClient(session *tcpsession.Tcpsession, rpk *packet.Rpacket) {
+	session.Send(packet.NewWpacket(rpk.Buffer(), rpk.IsRaw()), sendFinish)
 }
 
-func session_close(session *tcpsession.Tcpsession) {
+func sessionClose(session *tcpsession.Tcpsession) {
 	fmt.Printf("client disconnect\n")
 }
 
@@ -49,7 +49,6 @@ func runServer(cmd *Command, args []string) bool {
 
 	listener, err := net.ListenTCP("tcp", tcpAddr)
 	checkError(err)
-
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -57,7 +56,7 @@ func runServer(cmd *Command, args []string) bool {
 			continue
 		}
 		session := tcpsession.NewTcpSession(conn, true)
-		go tcpsession.ProcessSession(session, process_client, session_close)
+		go tcpsession.ProcessSession(session, processClient, sessionClose)
 	}
 
 	return true
