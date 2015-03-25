@@ -19,6 +19,7 @@ var exitStatus = 0
 var commands = []*Command{
 	cmdVersion,
 	cmdServer,
+	cmdClient,
 }
 
 func main() {

@@ -2,8 +2,8 @@
 package main
 
 import (
-	"./packet"
-	"./tcpsession"
+	protocol "./protocol"
+	utils "./utils"
 	"fmt"
 	"net"
 	"os"
@@ -18,25 +18,12 @@ var cmdServer = &Command{
 	DefaultParameters: ":1200",
 }
 
-func sendFinish(s interface{}, wpk *packet.Wpacket) {
-	session := s.(*tcpsession.Tcpsession)
-	session.Close()
-}
-
-func processClient(session *tcpsession.Tcpsession, rpk *packet.Rpacket) {
-	session.Send(packet.NewWpacket(rpk.Buffer(), rpk.IsRaw()), sendFinish)
-}
-
-func sessionClose(session *tcpsession.Tcpsession) {
-	fmt.Printf("client disconnect\n")
-}
-
 // func main() {
 func runServer(cmd *Command, args []string) bool {
 
-	fmt.Fprintf(os.Stderr, "number of cpus:%d:\n", NCPU)
+	fmt.Fprintf(os.Stderr, "number of cpus:%d:\n", utils.NCPU)
 	fmt.Fprintf(os.Stderr, "number of cpus as reported by go:%d:\n", runtime.NumCPU())
-	runtime.GOMAXPROCS(NCPU)
+	runtime.GOMAXPROCS(utils.NCPU)
 
 	service := cmd.DefaultParameters
 
@@ -44,21 +31,51 @@ func runServer(cmd *Command, args []string) bool {
 		service = args[0]
 	}
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
-	checkError(err)
+	netListen, err := net.Listen("tcp", service)
+	utils.CheckError(err)
 
-	listener, err := net.ListenTCP("tcp", tcpAddr)
-	checkError(err)
+	defer netListen.Close()
+
+	utils.Log("Waiting for clients")
 	for {
-		conn, err := listener.Accept()
+		conn, err := netListen.Accept()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to accept:retrying:%t:\n", err)
 			continue
 		}
-		session := tcpsession.NewTcpSession(conn, true)
-		go tcpsession.ProcessSession(session, processClient, sessionClose)
+
+		utils.Log(conn.RemoteAddr().String(), " tcp connect success")
+		go handleConnection(conn)
 	}
 
 	return true
 
+}
+
+func handleConnection(conn net.Conn) {
+	//声明一个临时缓冲区，用来存储被截断的数据
+	tmpBuffer := make([]byte, 0)
+
+	//声明一个管道用于接收解包的数据
+	readerChannel := make(chan []byte, 16)
+	go reader(readerChannel)
+
+	buffer := make([]byte, 1024)
+	for {
+		n, err := conn.Read(buffer)
+		if err != nil {
+			utils.Log(conn.RemoteAddr().String(), " connection error: ", err)
+			return
+		}
+
+		tmpBuffer = protocol.Unpack(append(tmpBuffer, buffer[:n]...), readerChannel)
+	}
+}
+
+func reader(readerChannel chan []byte) {
+	for {
+		select {
+		case data := <-readerChannel:
+			utils.Log(string(data))
+		}
+	}
 }
